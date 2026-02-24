@@ -23,7 +23,7 @@ class FireRedLidAed(torch.nn.Module):
 
         self.lid_decoder = TransformerDecoder(
             args.sos_id, args.eos_id, args.pad_id, args.lid_odim,
-            args.n_layers_dec, args.n_head, args.d_model,
+            args.n_layers_lid_dec, args.n_head, args.d_model,
             args.residual_dropout, args.pe_maxlen)
 
     def process(self, padded_input, input_lengths,
