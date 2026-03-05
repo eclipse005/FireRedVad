@@ -255,6 +255,14 @@ $ bash inference_punc.sh
 ### Python API Usage
 Set up `PYTHONPATH` first: `export PYTHONPATH=$PWD/:$PYTHONPATH`
 
+#### VLLM
+```python
+#Serving FireRedASR2-LLM with latest vLLM for the highest performance.
+#For more details, see https://github.com/vllm-project/vllm/pull/35727.
+vllm serve allendou/FireRedASR2-LLM-vllm -tp=2 --dtype=float32
+python3 examples/online_serving/openai_transcription_client.py --repetition_penalty=1.0 --audio_path=/root/hello_zh.wav
+```
+
 #### ASR
 ```python
 from fireredasr2s.fireredasr2 import FireRedAsr2, FireRedAsr2Config
