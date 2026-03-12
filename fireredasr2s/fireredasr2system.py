@@ -78,13 +78,13 @@ class FireRedAsr2System:
                 batch_lid_results = self.lid.process(batch_asr_uttid, batch_asr_wav)
                 logger.info(f"LID: {batch_lid_results}")
             else:
-                # 注意：此处用最初的 batch 长度，以保证和 ASR 初始结果数量对齐
+                # Note: The original batch size is used here to ensure alignment with the initial number of ASR results
                 batch_lid_results = [None] * len(batch_asr_results)
 
-            # 同步遍历并过滤，保证 asr_results 和 lid_results 永远一一对应
+            # Synchronously traverse and filter to ensure that asr_results and lid_results always maintain a one-to-one correspondence
             for a_res, l_res in zip(batch_asr_results, batch_lid_results):
                 text = a_res.get("text", "").strip()
-                # 过滤掉 <blank>, <sil> 以及完全为空的字符串 ""
+                # Filter out <blank>, <sil> and completely empty strings ""
                 if not text or re.search(r"(<blank>)|(<sil>)", text):
                     continue
                 asr_results.append(a_res)

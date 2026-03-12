@@ -42,7 +42,7 @@ class FireRedPunc:
 
     @torch.no_grad()
     def process(self, batch_text, batch_uttid=None):
-        # 【新增】：拦截空输入，防止 max([]) 报错
+        # Intercept empty input to prevent max([]) from throwing an error
         if not batch_text:
             return []
 
@@ -73,7 +73,7 @@ class FireRedPunc:
 
     @torch.no_grad()
     def process_with_timestamp(self, batch_timestamp, batch_uttid=None):
-        # 【新增】：拦截空输入，防止 max([]) 报错
+        # Intercept empty input to prevent max([]) from throwing an error
         if not batch_timestamp:
             return []
 
@@ -300,7 +300,7 @@ class ModelIO:
                     start = timestamp[1]
                 end = timestamp[2]
 
-                # 【新增】：每次循环前初始化 token 和 tag，防止上一个词的变量污染
+                # Initialize the variables 'token' and 'tag' before each iteration to prevent contamination from the previous word's variables
                 token = ""
                 tag = self.DEFAULT_OUT
 
@@ -314,8 +314,8 @@ class ModelIO:
                         token += sub_token
                     i += 1
 
-                # 【新增】：如果分词器没有产出任何token (例如输入本来就是空字符串"")
-                # 强行把 token 赋值为原始字符串，保证断言通过且后续逻辑不丢失信息
+                # If the word segmenter fails to produce any tokens (for example, the input is an empty string "")
+                # Forcefully assign the original string to the token to ensure that the assertion passes and the subsequent logic retains all necessary information
                 if split_num == 0:
                     token = timestamp[0]
 
