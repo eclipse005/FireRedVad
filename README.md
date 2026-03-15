@@ -21,13 +21,13 @@ Source: [FireRedTeam/FireRedASR2S](https://github.com/FireRedTeam/FireRedASR2S).
 Run with a WAV file:
 
 ```powershell
-.\fireredvad.exe --wav D:\path\to\audio.wav
+.\fireredvad.exe D:\path\to\audio.wav
 ```
 
 Save output JSON:
 
 ```powershell
-.\fireredvad.exe --wav D:\path\to\audio.wav > vad_result.json
+.\fireredvad.exe D:\path\to\audio.wav > vad_result.json
 ```
 
 Example output:
@@ -44,7 +44,7 @@ Example output:
 
 ## CLI Parameters
 
-- `--wav <path>` required, input WAV path
+- `<wav_path>` required, input WAV path
 - `--speech-threshold` default `0.4`
 - `--smooth-window-size` default `5`
 - `--min-speech-frame` default `20`
