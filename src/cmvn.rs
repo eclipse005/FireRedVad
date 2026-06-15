@@ -1,7 +1,6 @@
 use anyhow::{Context, Result, bail};
 use ndarray::Array2;
 use serde::{Deserialize, Serialize};
-use std::{fs, path::Path};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CmvnFile {
@@ -17,12 +16,6 @@ pub struct Cmvn {
 }
 
 impl Cmvn {
-    pub fn from_json(path: &Path) -> Result<Self> {
-        let text = fs::read_to_string(path)
-            .with_context(|| format!("failed to read cmvn json: {}", path.display()))?;
-        Self::from_json_str(&text).with_context(|| format!("bad cmvn json: {}", path.display()))
-    }
-
     pub fn from_json_str(text: &str) -> Result<Self> {
         let file: CmvnFile = serde_json::from_str(text).context("bad cmvn json content")?;
         if file.means.len() != file.dim || file.inverse_std_variances.len() != file.dim {

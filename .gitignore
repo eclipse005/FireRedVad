@@ -1,4 +1,16 @@
-target/
-tmp/
+# Rust build artifacts
+/target/
+
+# Scratch / working data
+/tmp/
+
+# Debug dumps produced during development
 debug_*.json
 rust_*.json
+
+# Compiled binaries
+*.exe
+
+# Editor / IDE
+.vscode/
+.idea/

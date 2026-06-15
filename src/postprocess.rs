@@ -38,31 +38,8 @@ enum VadState {
 }
 
 pub fn process_probs(raw_probs: &[f32], cfg: &VadConfig) -> Vec<i32> {
-    process_probs_debug(raw_probs, cfg).final_decisions
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct VadProcessDebug {
-    pub smoothed_probs: Vec<f64>,
-    pub binary_preds: Vec<i32>,
-    pub state_decisions: Vec<i32>,
-    pub fixed_decisions: Vec<i32>,
-    pub merged_decisions: Vec<i32>,
-    pub extended_decisions: Vec<i32>,
-    pub final_decisions: Vec<i32>,
-}
-
-pub fn process_probs_debug(raw_probs: &[f32], cfg: &VadConfig) -> VadProcessDebug {
     if raw_probs.is_empty() {
-        return VadProcessDebug {
-            smoothed_probs: Vec::new(),
-            binary_preds: Vec::new(),
-            state_decisions: Vec::new(),
-            fixed_decisions: Vec::new(),
-            merged_decisions: Vec::new(),
-            extended_decisions: Vec::new(),
-            final_decisions: Vec::new(),
-        };
+        return Vec::new();
     }
     let smoothed = smooth_prob(raw_probs, cfg.smooth_window_size);
     let binary = apply_threshold(&smoothed, cfg.speech_threshold);
@@ -70,16 +47,7 @@ pub fn process_probs_debug(raw_probs: &[f32], cfg: &VadConfig) -> VadProcessDebu
     let fixed = fix_smooth_window_start(&decisions, cfg.smooth_window_size);
     let merged = merge_short_silence_segments(&fixed, cfg.merge_silence_frame);
     let extended = extend_speech_segments(&merged, cfg.extend_speech_frame);
-    let final_decisions = split_long_speech_segments(&extended, raw_probs, cfg.max_speech_frame);
-    VadProcessDebug {
-        smoothed_probs: smoothed,
-        binary_preds: binary,
-        state_decisions: decisions,
-        fixed_decisions: fixed,
-        merged_decisions: merged,
-        extended_decisions: extended,
-        final_decisions,
-    }
+    split_long_speech_segments(&extended, raw_probs, cfg.max_speech_frame)
 }
 
 fn smooth_prob(probs: &[f32], smooth_window_size: usize) -> Vec<f64> {

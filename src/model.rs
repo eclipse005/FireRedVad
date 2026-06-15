@@ -3,11 +3,7 @@ use ndarray::{Array1, Array2, Array3, azip, s};
 use ndarray_npy::NpzReader;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::{
-    fs::File,
-    io::{Cursor, Read, Seek},
-    path::Path,
-};
+use std::io::{Cursor, Read, Seek};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelMeta {
@@ -151,20 +147,6 @@ pub struct DetectModel {
 }
 
 impl DetectModel {
-    pub fn from_dir(model_dir: &Path) -> Result<Self> {
-        let meta_path = model_dir.join("model_meta.json");
-        let meta_text = std::fs::read_to_string(&meta_path)
-            .with_context(|| format!("failed to read {}", meta_path.display()))?;
-        let meta: ModelMeta =
-            serde_json::from_str(&meta_text).context("bad model_meta.json format")?;
-
-        let npz_path = model_dir.join("weights.npz");
-        let f = File::open(&npz_path)
-            .with_context(|| format!("failed to open {}", npz_path.display()))?;
-        let mut npz = NpzReader::new(f).context("failed to parse weights.npz")?;
-        Self::from_meta_and_npz(meta, &mut npz)
-    }
-
     pub fn from_embedded(meta_json: &[u8], weights_npz: &[u8]) -> Result<Self> {
         let meta_text =
             std::str::from_utf8(meta_json).context("embedded model_meta is not utf8")?;
