@@ -56,11 +56,25 @@ jobs:
       - name: Test
         run: cargo test --release --locked --target ${{ matrix.target }}
 
+      - name: Stage release binary
+        # Copy the built binary to a dist/ folder with a platform-specific name
+        # so artifacts from different targets don't clobber each other when
+        # uploaded to the Release (they all build to the basename `fireredvad`).
+        shell: bash
+        run: |
+          mkdir -p dist
+          ext=""
+          case "${{ matrix.target }}" in
+            *-pc-windows-*) ext=".exe" ;;
+          esac
+          cp "target/${{ matrix.target }}/release/${{ matrix.bin }}" \
+             "dist/${{ matrix.artifact }}${ext}"
+
       - name: Upload binary
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
-          path: target/${{ matrix.target }}/release/${{ matrix.bin }}
+          path: dist/${{ matrix.artifact }}*
           if-no-files-found: error
 
   release:
@@ -81,9 +95,9 @@ jobs:
         with:
           generate_release_notes: true
           files: |
-            artifacts/fireredvad-linux-x86_64/fireredvad
-            artifacts/fireredvad-linux-aarch64/fireredvad
-            artifacts/fireredvad-windows-x86_64/fireredvad.exe
-            artifacts/fireredvad-macos-aarch64/fireredvad
+            artifacts/fireredvad-linux-x86_64/fireredvad-linux-x86_64
+            artifacts/fireredvad-linux-aarch64/fireredvad-linux-aarch64
+            artifacts/fireredvad-windows-x86_64/fireredvad-windows-x86_64.exe
+            artifacts/fireredvad-macos-aarch64/fireredvad-macos-aarch64
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
