@@ -1,0 +1,31 @@
+[package]
+name = "fireredvad"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "fireredvad"
+path = "src/main.rs"
+
+[profile.release]
+# Cross-CPU-friendly build tuning. No target-cpu is pinned here so the binary
+# runs on any baseline x86-64; ISA-specific acceleration is handled at runtime
+# by the gemm crate. These flags help every CPU.
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+hound = "3"
+ndarray = { version = "0.16", features = ["serde"] }
+ndarray-npy = "0.9"
+num-traits = "0.2"
+realfft = "3"
+rubato = "0.16"
+rayon = "1.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+gemm = "0.18.2"
