@@ -30,11 +30,6 @@ jobs:
             os: windows-latest
             artifact: fireredvad-windows-x86_64
             bin: fireredvad.exe
-          # macOS x86_64 (Intel)
-          - target: x86_64-apple-darwin
-            os: macos-13
-            artifact: fireredvad-macos-x86_64
-            bin: fireredvad
           # macOS arm64 (Apple Silicon)
           - target: aarch64-apple-darwin
             os: macos-latest
@@ -89,7 +84,6 @@ jobs:
             artifacts/fireredvad-linux-x86_64/fireredvad
             artifacts/fireredvad-linux-aarch64/fireredvad
             artifacts/fireredvad-windows-x86_64/fireredvad.exe
-            artifacts/fireredvad-macos-x86_64/fireredvad
             artifacts/fireredvad-macos-aarch64/fireredvad
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

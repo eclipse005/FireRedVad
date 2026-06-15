@@ -2,10 +2,12 @@
 
 > **原生 Rust 实现的工业级 VAD** — 模型权重、CMVN 统计量与 metadata 全部以
 > `include_bytes!` 编译进二进制；下载 `fireredvad.exe` 直接跑，零运行时依赖。
+> 也可作为 Rust crate（`Vad` 高层 API）嵌入到你自己的音频管线中。
 >
 > **A native-Rust port of the industrial-grade VAD** — weights, CMVN stats, and
 > metadata are compiled in via `include_bytes!`. The single-file
-> `fireredvad.exe` runs with zero runtime dependencies.
+> `fireredvad.exe` runs with zero runtime dependencies. It can also be embedded
+> into your own pipeline as a Rust crate via the high-level `Vad` API.
 
 ---
 
@@ -129,6 +131,45 @@ cargo build --release
 ```
 
 `timestamps` 是若干 `[start_sec, end_sec]` 二元组，标记所有语音段。
+
+---
+
+## 作为 Rust 库使用 · Use as a Rust Library
+
+除了命令行可执行程序，`fireredvad` 也发布为 Rust crate。高层 `Vad` API 封装了
+模型加载、音频前端、推理与后处理，三行代码即可在你的程序里完成 VAD。
+
+Besides the CLI binary, `fireredvad` is published as a Rust crate. The
+high-level `Vad` API wraps model loading, the audio front-end, inference, and
+post-processing — VAD in three lines from your own program.
+
+```toml
+# Cargo.toml
+[dependencies]
+fireredvad = "0.1"
+```
+
+```rust
+use fireredvad::{Vad, VadConfig};
+
+fn main() -> anyhow::Result<()> {
+    let vad = Vad::new()?;                              // 内置预训练模型，零配置
+    let out = vad.detect_wav("audio.wav", &VadConfig::default())?;
+    for (start, end) in &out.timestamps {
+        println!("{start:.3}s -> {end:.3}s");
+    }
+    Ok(())
+}
+```
+
+`VadConfig` 的字段与下方「命令行参数」表一一对应 —— 同一套阈值/平滑/最短帧数
+语义，库和 CLI 共用。需要自定义音频源（如流式、内存缓冲）时，改用
+`detect_pcm` 接收原始 16 kHz 单声道样本即可。
+
+The fields of `VadConfig` map one-to-one to the **CLI Parameters** table below
+— the same threshold / smoothing / min-frames semantics are shared between the
+library and the CLI. For custom audio sources (streaming, in-memory buffers),
+use `detect_pcm` with raw 16 kHz mono samples instead.
 
 ---
 
