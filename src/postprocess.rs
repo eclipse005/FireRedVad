@@ -46,15 +46,13 @@ impl Default for VadConfig {
 ///
 /// Each row: `(accumulated_speech_upper_ms, silence_threshold_ms)`. The longer
 /// a speech segment has run, the shorter a silence gap is needed to cut it.
-/// Mirrors the "offline" column of FunASR's FSMN-VAD dynamic-VAD table.
+/// Sourced from FunASR's `fsmn_vad_streaming/dynamic_vad.py` `DEFAULT_SILENCE_SCHEDULE`.
 pub const FUNASR_OFFLINE_SCHEDULE: &[(u32, u32)] = &[
     (5_000, 2_000),
-    (10_000, 2_000),
+    (10_000, 1_500),
     (15_000, 1_000),
-    (20_000, 1_000),
     (30_000, 800),
-    (45_000, 600),
-    (60_000, 300),
+    (45_000, 400),
     (u32::MAX, 100),
 ];
 
@@ -373,21 +371,25 @@ mod tests {
     #[test]
     fn silence_threshold_lookup_matches_funasr_offline_table() {
         let sched = FUNASR_OFFLINE_SCHEDULE;
-        // ms → expected threshold frames (threshold_ms / 10)
-        // ≤10s → 2000ms = 200 frames (covers 0ms, 5s boundary, 10s boundary)
+        // (accumulated_frames, expected_threshold_frames) — each band of the
+        // FunASR schedule, checked at its low end, the boundary, and just over.
+        // ≤5s  → 2000ms = 200 frames
         assert_eq!(silence_threshold_for(0, sched, 999), 200); // 0ms
-        assert_eq!(silence_threshold_for(500, sched, 999), 200); // 5000ms
-        assert_eq!(silence_threshold_for(1000, sched, 999), 200); // 10000ms (5-10s band)
-        // 10–20s → 1000ms = 100 frames
+        assert_eq!(silence_threshold_for(500, sched, 999), 200); // 5000ms (band edge)
+        // ≤10s → 1500ms = 150 frames
+        assert_eq!(silence_threshold_for(501, sched, 999), 150); // 5010ms
+        assert_eq!(silence_threshold_for(1000, sched, 999), 150); // 10000ms (band edge)
+        // ≤15s → 1000ms = 100 frames
         assert_eq!(silence_threshold_for(1001, sched, 999), 100); // 10010ms
-        assert_eq!(silence_threshold_for(1999, sched, 999), 100); // 19990ms
-        // 20–30s → 800ms = 80 frames
-        assert_eq!(silence_threshold_for(2500, sched, 999), 80); // 25000ms
-        // 30–45s → 600ms = 60 frames
-        assert_eq!(silence_threshold_for(4000, sched, 999), 60); // 40000ms
-        // 45–60s → 300ms = 30 frames
-        assert_eq!(silence_threshold_for(5500, sched, 999), 30); // 55000ms
-        // >60s → 100ms = 10 frames
+        assert_eq!(silence_threshold_for(1500, sched, 999), 100); // 15000ms (band edge)
+        // ≤30s → 800ms = 80 frames
+        assert_eq!(silence_threshold_for(1501, sched, 999), 80); // 15010ms
+        assert_eq!(silence_threshold_for(3000, sched, 999), 80); // 30000ms (band edge)
+        // ≤45s → 400ms = 40 frames
+        assert_eq!(silence_threshold_for(3001, sched, 999), 40); // 30010ms
+        assert_eq!(silence_threshold_for(4500, sched, 999), 40); // 45000ms (band edge)
+        // >45s → 100ms = 10 frames
+        assert_eq!(silence_threshold_for(4501, sched, 999), 10); // 45010ms
         assert_eq!(silence_threshold_for(7000, sched, 999), 10); // 70000ms
     }
 
