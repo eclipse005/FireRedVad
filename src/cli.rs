@@ -1,4 +1,4 @@
-use crate::postprocess::VadConfig;
+use crate::postprocess::{FUNASR_OFFLINE_SCHEDULE, VadConfig};
 use crate::vad::Vad;
 use anyhow::Result;
 use clap::Parser;
@@ -25,6 +25,10 @@ struct Args {
     extend_speech_frame: usize,
     #[arg(long, default_value_t = 30000)]
     chunk_max_frame: usize,
+    /// Enable dynamic silence threshold (FunASR offline schedule: longer
+    /// speech segments get tighter silence cuts). Overrides min_silence_frame.
+    #[arg(long, default_value_t = false)]
+    dynamic_vad: bool,
 }
 
 pub fn run() -> Result<()> {
@@ -37,6 +41,11 @@ pub fn run() -> Result<()> {
         min_silence_frame: args.min_silence_frame,
         merge_silence_frame: args.merge_silence_frame,
         extend_speech_frame: args.extend_speech_frame,
+        silence_schedule: if args.dynamic_vad {
+            FUNASR_OFFLINE_SCHEDULE.to_vec()
+        } else {
+            Vec::new()
+        },
     };
 
     let vad = Vad::new()?;

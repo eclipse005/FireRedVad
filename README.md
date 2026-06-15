@@ -171,6 +171,11 @@ The fields of `VadConfig` map one-to-one to the **CLI Parameters** table below
 library and the CLI. For custom audio sources (streaming, in-memory buffers),
 use `detect_pcm` with raw 16 kHz mono samples instead.
 
+`VadConfig.silence_schedule` is also settable programmatically: pass
+`FUNASR_OFFLINE_SCHEDULE.to_vec()` (or your own `(upper_ms, threshold_ms)`
+table) to enable dynamic silence cuts from library code — the same thing the
+`--dynamic-vad` CLI flag does.
+
 ---
 
 ## 命令行参数 · CLI Parameters
@@ -186,6 +191,55 @@ use `detect_pcm` with raw 16 kHz mono samples instead.
 | `--merge-silence-frame` | `0`     | 短于该帧数的静音缝直接合并 / Merge short silence gaps |
 | `--extend-speech-frame` | `0`     | 语音段前后各延展的帧数 / Bidirectional extension (frames) |
 | `--chunk-max-frame`     | `30000` | 并行分块推理的最大帧数 / Max frames per parallel chunk |
+| `--dynamic-vad`         | `off`   | 启用动态静音阈值(FunASR offline 策略，段越长静音切分越紧）/ Enable dynamic silence threshold |
+
+---
+
+## 动态 VAD · Dynamic VAD
+
+默认情况下，`--min-silence-frame`（默认 20 帧 = 200 ms）是**固定**的静音切分
+阈值：无论当前语音段说了多久，都要静音这么久才切段。这在长音频里会留下过长的
+整段（说话人的换气停顿、思考停顿不足以触发切分）。
+
+开启 `--dynamic-vad` 后，静音切分阈值随**当前语音段的累积时长动态收紧**——段越长，
+一个越短的停顿就足以切段。这来自 [FunASR](https://github.com/modelscope/FunASR)
+FSMN-VAD 的 offline 动态阈值策略，适合 ASR 数据切片等"希望长段被合理切碎"的场景。
+
+By default `--min-silence-frame` (default 20 frames = 200 ms) is a **fixed**
+silence-cut threshold: regardless of how long the current utterance has run, a
+silence gap must last that long to trigger a cut. On long audio this leaves
+over-long segments (breathing/thinking pauses never reach the cut threshold).
+
+With `--dynamic-vad`, the silence-cut threshold **tightens as the current
+speech segment runs longer** — the longer the segment, the shorter a pause that
+suffices to cut. This mirrors the offline dynamic-threshold strategy of
+[FunASR](https://github.com/modelscope/FunASR)'s FSMN-VAD, useful for ASR data
+slicing where long segments should be broken up sensibly.
+
+```powershell
+.\fireredvad.exe D:\path\to\audio.wav --dynamic-vad
+```
+
+**内置阈值表 · Built-in schedule**（FunASR offline）：
+
+| 当前段累积时长 / Segment accumulated | 静音切分阈值 / Silence threshold |
+|:--|--:|
+| ≤ 5 s          | 2000 ms |
+| 5–10 s         | 2000 ms |
+| 10–15 s        | 1000 ms |
+| 15–20 s        | 1000 ms |
+| 20–30 s        |  800 ms |
+| 30–45 s        |  600 ms |
+| 45–60 s        |  300 ms |
+| > 60 s         |  100 ms |
+
+> `--dynamic-vad` 与 `--min-silence-frame` 互斥：开启动态后，固定阈值被忽略。
+> `--max-speech-frame`（硬切上限）依然生效作为兜底——当一整段没有任何静音停顿时，
+> 仍按它强制切分。两者互补。
+>
+> `--dynamic-vad` is mutually exclusive with `--min-silence-frame` (the fixed
+> value is ignored once dynamic is on). `--max-speech-frame` still applies as a
+> hard ceiling: a segment with no silence gap at all is still force-cut by it.
 
 ---
 

@@ -4,6 +4,9 @@ use std::collections::VecDeque;
 pub const FRAME_LENGTH_S: f32 = 0.025;
 pub const FRAME_SHIFT_S: f32 = 0.010;
 
+/// Frame shift in milliseconds (10 ms). Used to convert frame counts ↔ ms.
+pub const FRAME_SHIFT_MS: u32 = 10;
+
 #[derive(Debug, Clone)]
 pub struct VadConfig {
     pub smooth_window_size: usize,
@@ -13,6 +16,15 @@ pub struct VadConfig {
     pub min_silence_frame: usize,
     pub merge_silence_frame: usize,
     pub extend_speech_frame: usize,
+    /// Dynamic silence-threshold schedule. Each entry is
+    /// `(accumulated_speech_upper_ms, silence_threshold_ms)`: once the current
+    /// speech segment has run for that long, silence is cut at the given
+    /// threshold. Longer segments thus get tighter silence cuts.
+    ///
+    /// Empty (default) → a fixed `min_silence_frame` is used (legacy behavior,
+    /// fully backward-compatible). Set it to [`FUNASR_OFFLINE_SCHEDULE`] via
+    /// `--dynamic-vad` to enable dynamic thresholds.
+    pub silence_schedule: Vec<(u32, u32)>,
 }
 
 impl Default for VadConfig {
@@ -25,8 +37,48 @@ impl Default for VadConfig {
             min_silence_frame: 20,
             merge_silence_frame: 0,
             extend_speech_frame: 0,
+            silence_schedule: Vec::new(),
         }
     }
+}
+
+/// FunASR FSMN-VAD offline dynamic silence-threshold schedule.
+///
+/// Each row: `(accumulated_speech_upper_ms, silence_threshold_ms)`. The longer
+/// a speech segment has run, the shorter a silence gap is needed to cut it.
+/// Mirrors the "offline" column of FunASR's FSMN-VAD dynamic-VAD table.
+pub const FUNASR_OFFLINE_SCHEDULE: &[(u32, u32)] = &[
+    (5_000, 2_000),
+    (10_000, 2_000),
+    (15_000, 1_000),
+    (20_000, 1_000),
+    (30_000, 800),
+    (45_000, 600),
+    (60_000, 300),
+    (u32::MAX, 100),
+];
+
+/// Resolve the silence-cut threshold (in frames) for a speech segment that has
+/// already accumulated `accumulated_frames`.
+///
+/// With a non-empty `schedule`, look up the first row whose accumulated upper
+/// bound covers the current duration and convert its ms threshold to frames.
+/// With an empty schedule (dynamic-VAD disabled) just return `fallback`, so the
+/// behavior is identical to the legacy fixed-threshold path.
+fn silence_threshold_for(
+    accumulated_frames: usize,
+    schedule: &[(u32, u32)],
+    fallback: usize,
+) -> usize {
+    if schedule.is_empty() {
+        return fallback;
+    }
+    let ms = (accumulated_frames as u32).saturating_mul(FRAME_SHIFT_MS);
+    schedule
+        .iter()
+        .find(|(upper_ms, _)| *upper_ms >= ms)
+        .map(|(_, thresh_ms)| (*thresh_ms / FRAME_SHIFT_MS) as usize)
+        .unwrap_or(fallback)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -75,13 +127,17 @@ fn apply_threshold(probs: &[f64], threshold: f32) -> Vec<i32> {
 }
 
 fn smooth_preds_with_state_machine(binary_preds: &[i32], cfg: &VadConfig) -> Vec<i32> {
-    if cfg.min_speech_frame == 0 && cfg.min_silence_frame == 0 {
+    if cfg.min_speech_frame == 0 && cfg.min_silence_frame == 0 && cfg.silence_schedule.is_empty() {
         return binary_preds.to_vec();
     }
     let mut decisions = vec![0i32; binary_preds.len()];
     let mut state = VadState::Silence;
     let mut speech_start = -1isize;
     let mut silence_start = -1isize;
+    // First frame of the currently-confirmed speech segment (set when
+    // PossibleSpeech promotes to Speech). Drives the dynamic silence threshold:
+    // the longer the segment has run, the tighter the silence cut.
+    let mut speech_seg_start: usize = 0;
 
     for (t, &is_speech) in binary_preds.iter().enumerate() {
         match state {
@@ -95,6 +151,7 @@ fn smooth_preds_with_state_machine(binary_preds: &[i32], cfg: &VadConfig) -> Vec
                 if is_speech == 1 {
                     if t as isize - speech_start >= cfg.min_speech_frame as isize {
                         state = VadState::Speech;
+                        speech_seg_start = speech_start.max(0) as usize;
                         for v in decisions
                             .iter_mut()
                             .take(t)
@@ -116,9 +173,19 @@ fn smooth_preds_with_state_machine(binary_preds: &[i32], cfg: &VadConfig) -> Vec
             }
             VadState::PossibleSilence => {
                 if is_speech == 0 {
-                    if t as isize - silence_start >= cfg.min_silence_frame as isize {
+                    // Dynamic threshold: based on how long the current speech
+                    // segment has accumulated. Falls back to the fixed
+                    // min_silence_frame when no schedule is configured.
+                    let accumulated = t.saturating_sub(speech_seg_start);
+                    let thresh = silence_threshold_for(
+                        accumulated,
+                        &cfg.silence_schedule,
+                        cfg.min_silence_frame,
+                    );
+                    if t as isize - silence_start >= thresh as isize {
                         state = VadState::Silence;
                         speech_start = -1;
+                        speech_seg_start = 0;
                     }
                 } else {
                     state = VadState::Speech;
@@ -301,5 +368,77 @@ mod tests {
         let decisions = vec![1i32; probs.len()];
         let out = split_long_speech_segments(&decisions, &probs, 2_000);
         assert_eq!(out.len(), decisions.len());
+    }
+
+    #[test]
+    fn silence_threshold_lookup_matches_funasr_offline_table() {
+        let sched = FUNASR_OFFLINE_SCHEDULE;
+        // ms → expected threshold frames (threshold_ms / 10)
+        // ≤10s → 2000ms = 200 frames (covers 0ms, 5s boundary, 10s boundary)
+        assert_eq!(silence_threshold_for(0, sched, 999), 200); // 0ms
+        assert_eq!(silence_threshold_for(500, sched, 999), 200); // 5000ms
+        assert_eq!(silence_threshold_for(1000, sched, 999), 200); // 10000ms (5-10s band)
+        // 10–20s → 1000ms = 100 frames
+        assert_eq!(silence_threshold_for(1001, sched, 999), 100); // 10010ms
+        assert_eq!(silence_threshold_for(1999, sched, 999), 100); // 19990ms
+        // 20–30s → 800ms = 80 frames
+        assert_eq!(silence_threshold_for(2500, sched, 999), 80); // 25000ms
+        // 30–45s → 600ms = 60 frames
+        assert_eq!(silence_threshold_for(4000, sched, 999), 60); // 40000ms
+        // 45–60s → 300ms = 30 frames
+        assert_eq!(silence_threshold_for(5500, sched, 999), 30); // 55000ms
+        // >60s → 100ms = 10 frames
+        assert_eq!(silence_threshold_for(7000, sched, 999), 10); // 70000ms
+    }
+
+    #[test]
+    fn silence_threshold_empty_schedule_falls_back_to_fixed() {
+        // Dynamic-VAD disabled (empty schedule) must return the fixed fallback,
+        // so the legacy behavior is byte-for-byte preserved.
+        let empty: &[(u32, u32)] = &[];
+        assert_eq!(silence_threshold_for(0, empty, 20), 20);
+        assert_eq!(silence_threshold_for(6000, empty, 20), 20);
+    }
+
+    #[test]
+    fn dynamic_vad_cuts_long_segment_on_short_silence() {
+        // A long speech segment (well past 60s of frames) followed by a short
+        // silence gap that is shorter than the legacy threshold but long enough
+        // for the tightened dynamic threshold (>60s → 100ms = 10 frames), then a
+        // resumption of speech long enough to form a second segment.
+        //
+        // Legacy fixed min_silence_frame = 200 frames → the 50-frame gap does
+        // NOT cut, so the whole run stays as one segment.
+        // Dynamic schedule (>60s → 10 frames) → the 50-frame gap DOES cut,
+        // yielding two segments.
+        let speech_frames = 7_000; // 70s of speech (7000 frames * 10ms)
+        let gap = 50; // 500ms silence
+        let tail_speech = 50; // resume speech, long enough to confirm a 2nd segment
+        let mut binary = vec![1i32; speech_frames];
+        binary.extend(std::iter::repeat_n(0, gap));
+        binary.extend(std::iter::repeat_n(1, tail_speech));
+
+        // Legacy: no schedule, fixed 200-frame silence threshold.
+        let cfg_legacy = VadConfig {
+            min_speech_frame: 1,
+            min_silence_frame: 200,
+            ..VadConfig::default()
+        };
+        let d_legacy = smooth_preds_with_state_machine(&binary, &cfg_legacy);
+        let cuts_legacy = decision_to_segment(&d_legacy, None).len();
+
+        // Dynamic: FunASR offline schedule; at 70s the threshold is 10 frames.
+        let cfg_dyn = VadConfig {
+            min_speech_frame: 1,
+            min_silence_frame: 200,
+            silence_schedule: FUNASR_OFFLINE_SCHEDULE.to_vec(),
+            ..VadConfig::default()
+        };
+        let d_dyn = smooth_preds_with_state_machine(&binary, &cfg_dyn);
+        let cuts_dyn = decision_to_segment(&d_dyn, None).len();
+
+        // Legacy keeps it as one segment (gap too short); dynamic splits it.
+        assert_eq!(cuts_legacy, 1, "legacy should not cut on a 50-frame gap");
+        assert_eq!(cuts_dyn, 2, "dynamic should cut at >60s threshold (10 frames)");
     }
 }
