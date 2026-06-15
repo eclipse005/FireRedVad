@@ -1,12 +1,14 @@
 # FireRedVAD
 
-A native **Rust CLI for non-streaming Voice Activity Detection (VAD)**. The model
-weights, CMVN stats, and metadata are embedded directly into the binary at build
-time via `include_bytes!`, so the resulting `fireredvad` executable is fully
-self-contained — no model files, runtime, or external dependencies required.
+A self-contained **native Rust CLI for non-streaming Voice Activity Detection
+(VAD)** on Windows. The model weights, CMVN stats, and metadata are embedded
+directly into the binary at build time via `include_bytes!`, so the resulting
+`fireredvad.exe` needs no model files, runtime, or external dependencies — just
+download and run.
 
 This is an independent Rust reimplementation of the VAD module from
-[FireRedTeam/FireRedASR2S](https://github.com/FireRedTeam/FireRedASR2S).
+[FireRedTeam/FireRedASR2S](https://github.com/FireRedTeam/FireRedASR2S),
+producing detection results consistent with the upstream Python implementation.
 
 ## Benchmark
 
