@@ -115,17 +115,6 @@ The prebuilt weights in `model/` (`weights.npz`, `cmvn.json`, `model_meta.json`)
 originate from the [FireRedTeam/FireRedASR2S](https://github.com/FireRedTeam/FireRedASR2S)
 VAD checkpoint and are redistributed under the same Apache-2.0 license.
 
-To regenerate them from an upstream checkpoint, use the export tool:
-
-```bash
-python tools/export_vad_weights.py \
-    --model-dir <path-to-upstream-fireredvad-model> \
-    --out-dir model
-```
-
-This reads the upstream `model.pth.tar` / `cmvn.ark` and writes the
-`weights.npz` / `cmvn.json` / `model_meta.json` consumed by this crate.
-
 ## Acknowledgements
 
 - [FireRedTeam/FireRedASR2S](https://github.com/FireRedTeam/FireRedASR2S) — the
